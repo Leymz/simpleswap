@@ -1,0 +1,182 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 216 50% 10%;
+    --foreground: 210 20% 90%;
+    --card: 216 45% 14%;
+    --card-foreground: 210 20% 90%;
+    --primary: 200 80% 65%;
+    --primary-foreground: 216 50% 10%;
+    --secondary: 216 35% 18%;
+    --muted: 216 30% 20%;
+    --muted-foreground: 216 20% 50%;
+    --accent: 170 50% 50%;
+    --border: 216 30% 22%;
+    --glass-bg: 216 40% 16%;
+    --glass-border: 216 30% 28%;
+    --glass-highlight: 200 40% 90%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+}
+
+@layer components {
+  .glass-card-strong {
+    @apply relative overflow-hidden rounded-2xl;
+    background: hsla(var(--glass-bg) / 0.5);
+    border: 1px solid hsla(var(--glass-border) / 0.5);
+    backdrop-filter: blur(60px) saturate(1.8);
+    -webkit-backdrop-filter: blur(60px) saturate(1.8);
+    box-shadow: 
+      0 16px 48px hsla(0 0% 0% / 0.5),
+      0 0 0 1px hsla(var(--glass-border) / 0.2),
+      inset 0 1px 0 hsla(var(--glass-highlight) / 0.08),
+      inset 0 0 120px hsla(var(--glass-bg) / 0.15);
+  }
+
+  .glass-input {
+    @apply rounded-xl px-4 py-3;
+    background: hsla(var(--glass-bg) / 0.3);
+    border: 1px solid hsla(var(--glass-border) / 0.3);
+    backdrop-filter: blur(20px);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .glass-input:focus-within {
+    border-color: hsla(var(--primary) / 0.4);
+    box-shadow: 0 0 20px hsla(var(--primary) / 0.1);
+  }
+
+  .glass-button {
+    @apply rounded-xl px-6 py-3 font-semibold transition-all duration-300;
+    background: hsla(var(--primary) / 0.15);
+    color: hsl(var(--primary));
+    border: 1px solid hsla(var(--primary) / 0.3);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 4px 16px hsla(var(--primary) / 0.1);
+  }
+
+  .glass-button:hover:not(:disabled) {
+    background: hsla(var(--primary) / 0.25);
+    border-color: hsla(var(--primary) / 0.5);
+    box-shadow: 0 6px 24px hsla(var(--primary) / 0.2);
+    transform: translateY(-1px);
+  }
+
+  .glass-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .glass-nav {
+    @apply rounded-full px-2 py-1.5;
+    background: hsla(var(--glass-bg) / 0.3);
+    border: 1px solid hsla(var(--glass-border) / 0.35);
+    backdrop-filter: blur(40px) saturate(1.5);
+    box-shadow: 0 4px 24px hsla(0 0% 0% / 0.3);
+  }
+}
+
+/* Arc background */
+.arc-bg {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.arc-bg::before {
+  content: '';
+  position: absolute;
+  bottom: -50%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 140%;
+  height: 160%;
+  border-radius: 50% 50% 0 0;
+  background: radial-gradient(
+    ellipse at center bottom,
+    hsla(216, 50%, 22%, 0.8) 0%,
+    hsla(216, 45%, 16%, 0.5) 25%,
+    hsla(216, 40%, 12%, 0.2) 50%,
+    transparent 70%
+  );
+}
+
+.arc-bg::after {
+  content: '';
+  position: absolute;
+  bottom: -45%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 85%;
+  height: 125%;
+  border-radius: 50% 50% 0 0;
+  border: 2px solid hsla(200, 80%, 65%, 0.18);
+  background: radial-gradient(
+    ellipse at center bottom,
+    hsla(170, 40%, 35%, 0.08) 0%,
+    transparent 50%
+  );
+  box-shadow:
+    0 0 120px 30px hsla(216, 45%, 22%, 0.2),
+    0 0 60px 10px hsla(200, 80%, 65%, 0.04),
+    inset 0 0 80px 15px hsla(216, 40%, 18%, 0.12);
+}
+
+.arc-bg-inner {
+  position: absolute;
+  inset: 0;
+}
+
+.arc-bg-inner::before {
+  content: '';
+  position: absolute;
+  bottom: -40%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 65%;
+  height: 115%;
+  border-radius: 50% 50% 0 0;
+  border: 1.5px solid hsla(200, 80%, 65%, 0.1);
+}
+
+.arc-bg-inner::after {
+  content: '';
+  position: absolute;
+  bottom: -50%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 105%;
+  height: 140%;
+  border-radius: 50% 50% 0 0;
+  border: 1.5px solid hsla(200, 80%, 65%, 0.07);
+}
+
+.noise-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
