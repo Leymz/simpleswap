@@ -5,7 +5,7 @@ A DEX swap frontend for Arc Testnet built with Next.js, React, and RainbowKit.
 ## Features
 
 - 🌈 **RainbowKit** wallet connection (MetaMask, WalletConnect, Coinbase, etc.)
-- 💱 **Token Swaps** via ArcFlow Finance V2.5 Router
+- 💱 **Token Swaps** via Custom SimpleDEX AMM Contract
 - 💰 **Real-time balances** and price quotes
 - ⚙️ **Configurable slippage** tolerance
 - 📱 **Fully responsive** design
@@ -57,7 +57,7 @@ Go to [http://localhost:3000](http://localhost:3000)
 
 | Contract | Address |
 |----------|---------|
-| ArcFlow Router | `0x4AA8c7Ac458479d9A4FA5c1481e03061ac76824A` |
+| SimpleDEX | `0xB0a5D6ac1f5de0de293d4AF057303E32A7Eef9a0` |
 | USDC/EURC Pair | `0xFA61E1dE61DAf2EF4D8d9BAd4B99fa21C8EFAB8a` |
 
 ## Project Structure
