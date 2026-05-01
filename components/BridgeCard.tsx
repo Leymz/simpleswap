@@ -27,7 +27,6 @@ const tokens = [
   { symbol: 'EURC', icon: '💶' },
 ];
 
-// Circle's official CCTP testnet token addresses
 const TOKEN_ADDRESSES: Record<SupportedChain, Record<string, string>> = {
   ETH_SEPOLIA: {
     USDC: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
@@ -43,7 +42,6 @@ const TOKEN_ADDRESSES: Record<SupportedChain, Record<string, string>> = {
   },
 };
 
-// Viem chains config
 const arcTestnet = {
   id: 5042002,
   name: 'Arc Testnet',
@@ -68,7 +66,6 @@ export default function BridgeCard() {
   const [steps, setSteps] = useState<BridgeStep[]>([]);
   const [error, setError] = useState('');
 
-  // Success modal state
   const [completionId, setCompletionId] = useState<string | null>(null);
   const [dismissedCompletionId, setDismissedCompletionId] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -81,7 +78,6 @@ export default function BridgeCard() {
     txHash: string;
   } | null>(null);
 
-  // Balances & loading
   const [fromBalance, setFromBalance] = useState('0.0000');
   const [toBalance, setToBalance] = useState('0.0000');
   const [isLoadingBalances, setIsLoadingBalances] = useState(false);
@@ -160,7 +156,6 @@ export default function BridgeCard() {
     fetchBalances();
   }, [fromChain, toChain, token, address, fetchBalance]);
 
-  // Success modal logic
   useEffect(() => {
     if (error) {
       setShowSuccess(false);
@@ -180,8 +175,6 @@ export default function BridgeCard() {
   const handleFlip = useCallback(() => {
     setFromChain(toChain);
     setToChain(fromChain);
-    setFromBalance('0.0000');
-    setToBalance('0.0000');
   }, [fromChain, toChain]);
 
   const handleDismissSuccess = useCallback(() => {
@@ -204,7 +197,6 @@ export default function BridgeCard() {
       return;
     }
 
-    // HARD RESET
     setIsBridging(true);
     setError('');
     setCompletionId(null);
@@ -212,9 +204,12 @@ export default function BridgeCard() {
     setShowSuccess(false);
     setDismissedCompletionId(null);
     setCurrentStep(0);
+    
+    // CCTP has 3 steps: Burn → Attestation → Mint (automatic)
     setSteps([
-      { name: `Sign on ${SUPPORTED_CHAINS[fromChain].name}`, status: 'processing' },
-      { name: `Sign on ${SUPPORTED_CHAINS[toChain].name}`, status: 'pending' },
+      { name: `Burn on ${SUPPORTED_CHAINS[fromChain].name}`, status: 'processing' },
+      { name: 'Waiting for attestation', status: 'pending' },
+      { name: `Mint on ${SUPPORTED_CHAINS[toChain].name}`, status: 'pending' },
     ]);
 
     try {
@@ -224,88 +219,116 @@ export default function BridgeCard() {
 
       const kit = new BridgeKit();
 
+      console.log('=== STARTING BRIDGE ===');
+      
       const result: any = await kit.bridge({
         from: { adapter, chain: SUPPORTED_CHAINS[fromChain].bridgeId },
-        to: { adapter, chain: SUPPORTED_CHAINS[toChain].bridgeId },
+        to: { 
+          adapter, 
+          chain: SUPPORTED_CHAINS[toChain].bridgeId,
+          useForwarder: true,
+        },
         token: token as any,
         amount: amount,
       });
 
-      console.log('=== BRIDGEKIT RESULT ===', result);
+      console.log('=== BRIDGE RESULT ===', result);
 
-      // BridgeKit returns state + steps. Soft errors don't throw.
+      // Check for user rejection
+      if (
+        result?.error?.message?.includes('User rejected') ||
+        result?.error?.message?.includes('User denied') ||
+        result?.error?.code === 4001
+      ) {
+        throw new Error('Transaction cancelled by user');
+      }
+
+      // Check for explicit error state
       if (result?.state === 'error') {
         const failedStep = result.steps?.find((s: any) => s.state === 'error');
         throw new Error(failedStep?.error || failedStep?.errorMessage || 'Bridge failed');
       }
 
-      // Extract txHash from the burn step (or fallback to first step with a txHash)
-      const burnStep = result?.steps?.find((s: any) => s.name === 'burn');
-      const bridgeTxHash = burnStep?.txHash || result?.steps?.find((s: any) => s.txHash)?.txHash;
+      // Extract burn transaction hash
+      const burnStep = result?.steps?.find((s: any) => s.name === 'burn' || s.name === 'Burn');
+      const burnTxHash = burnStep?.txHash || burnStep?.hash;
 
-      if (!bridgeTxHash) {
-        throw new Error('Bridge completed but no transaction hash found in steps');
+      if (!burnTxHash) {
+        console.error('No burn hash found. Result steps:', result?.steps);
+        throw new Error('Bridge failed - no burn transaction hash');
       }
 
-      // First step success
+      // Step 1: Burn complete
       setSteps(prev => prev.map((s, i) => 
-        i === 0 ? { ...s, status: 'success' as const, txHash: bridgeTxHash } : s
+        i === 0 ? { ...s, status: 'success' as const, txHash: burnTxHash } : s
       ));
       setCurrentStep(1);
 
-      // Second step
+      // Step 2: Attestation (automatic, no user action)
       setSteps(prev => prev.map((s, i) => 
         i === 1 ? { ...s, status: 'processing' as const } : s
       ));
 
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Wait for attestation (Circle's backend)
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       setSteps(prev => prev.map((s, i) => 
         i === 1 ? { ...s, status: 'success' as const } : s
       ));
+      setCurrentStep(2);
 
-      // Clear previous error so useEffect allows the modal to show
+      // Step 3: Mint (automatic on destination chain)
+      setSteps(prev => prev.map((s, i) => 
+        i === 2 ? { ...s, status: 'processing' as const } : s
+      ));
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      setSteps(prev => prev.map((s, i) => 
+        i === 2 ? { ...s, status: 'success' as const } : s
+      ));
+
+      // Success!
       setError('');
       setSuccessData({
         amount,
         token,
         fromChain: SUPPORTED_CHAINS[fromChain].name,
         toChain: SUPPORTED_CHAINS[toChain].name,
-        txHash: bridgeTxHash,
+        txHash: burnTxHash,
       });
 
-      setCompletionId(bridgeTxHash);
+      setCompletionId(burnTxHash);
 
       // Refresh balances
       if (address) {
-        const [from, to] = await Promise.all([
-          fetchBalance(fromChain, token, address),
-          fetchBalance(toChain, token, address),
-        ]);
-        setFromBalance(from);
-        setToBalance(to);
+        setTimeout(async () => {
+          const [from, to] = await Promise.all([
+            fetchBalance(fromChain, token, address),
+            fetchBalance(toChain, token, address),
+          ]);
+          setFromBalance(from);
+          setToBalance(to);
+        }, 5000); // Wait 5s for balances to update
       }
 
     } catch (err: any) {
-      console.error('Bridge error:', err);
+      console.error('=== BRIDGE ERROR ===', err);
 
-      // Clear success state — useEffect handles showSuccess when error is set
       setCompletionId(null);
       setSuccessData(null);
 
-      // Detect user rejection
       if (
         err?.message?.includes('User rejected') ||
         err?.message?.includes('User denied') ||
         err?.message?.includes('user rejected') ||
+        err?.message?.includes('cancelled by user') ||
         err?.code === 4001 ||
         err?.code === 'ACTION_REJECTED'
       ) {
         setError('Transaction cancelled by user');
       } else {
-        // Other errors
-        const errorMsg = err?.shortMessage || err?.message || 'Bridge failed';
-        setError(errorMsg);
+        setError(err?.shortMessage || err?.message || 'Bridge failed');
       }
 
       setSteps(prev => prev.map(s => 
@@ -503,15 +526,19 @@ export default function BridgeCard() {
           disabled={!address || !amount || isBridging}
           onClick={handleBridge}
         >
-          {!address ? 'Connect wallet' : isBridging ? `Step ${currentStep + 1} of 2...` : 'Bridge'}
+          {!address ? 'Connect wallet' : isBridging ? `Processing step ${currentStep + 1} of 3...` : 'Bridge'}
         </button>
 
         <ul className="mt-4 space-y-1.5 rounded-xl border border-glass-border/30 bg-secondary/15 p-3 text-xs text-muted-foreground">
           <li>• Bridges use Circle CCTP for secure transfers</li>
-          <li>• Estimated time: 10–20 minutes</li>
-          <li>• Need native tokens for gas on both chains</li>
+          <li>• Process: Burn → Attestation → Mint (automatic)</li>
+          <li>• Estimated time: 10–20 minutes total</li>
         </ul>
       </div>
+
+      <p className="mt-4 text-center text-xs text-muted-foreground">
+        Built on Arc testnet. Not affiliated to Arc or Circle.
+      </p>
 
       {/* Success Dialog */}
       {showSuccess && successData && (
@@ -527,10 +554,10 @@ export default function BridgeCard() {
                 </div>
               </div>
               <h2 className="mb-1.5 text-center font-display text-xl font-bold text-foreground">
-                Bridge Completed!
+                Bridge Initiated!
               </h2>
               <p className="mb-5 text-center text-sm text-muted-foreground">
-                Your funds will arrive in ~10–20 minutes.
+                Tokens burned on source chain. Minting will complete automatically in ~10–20 minutes.
               </p>
               <div className="mb-4 w-full space-y-3 rounded-xl border border-glass-border/40 bg-secondary/30 p-4">
                 <div className="flex items-center justify-between gap-4 text-sm">
@@ -550,14 +577,15 @@ export default function BridgeCard() {
                 <div className="mb-5 flex w-full items-center justify-between gap-2 rounded-xl border border-glass-border/40 bg-secondary/20 px-3 py-2.5">
                   <div className="min-w-0 flex-1">
                     <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                      Tx Hash
+                      Burn Tx Hash
                     </p>
                     <p className="truncate font-mono text-xs text-foreground">
                       {successData.txHash.slice(0, 10)}...{successData.txHash.slice(-8)}
                     </p>
                   </div>
+                  
                   <a
-                    href={`${SUPPORTED_CHAINS[toChain].explorer}/tx/${successData.txHash}`}
+                    href={`${SUPPORTED_CHAINS[fromChain].explorer}/tx/${successData.txHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
