@@ -536,10 +536,6 @@ export default function BridgeCard() {
         </ul>
       </div>
 
-      <p className="mt-4 text-center text-xs text-muted-foreground">
-        Built on Arc testnet. Not affiliated to Arc or Circle.
-      </p>
-
       {/* Success Dialog */}
       {showSuccess && successData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
