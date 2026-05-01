@@ -8,6 +8,7 @@ import { TOKENS } from '@/config/tokens';
 import { ERC20_ABI, SIMPLE_DEX_ABI } from '@/config/abis';
 import { useTokenBalance } from '@/hooks/useTokenBalance';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
+import { addTransaction } from '@/components/TransactionHistory';
 
 export default function LiquidityCard() {
   const { address: userAddress, isConnected } = useAccount();
@@ -211,6 +212,18 @@ export default function LiquidityCard() {
         eurcAmount,
         txHash: hash,
       });
+            
+      // Log to history
+      addTransaction(userAddress, {
+        hash,
+        type: 'addLiquidity',
+        fromToken: 'USDC',
+        toToken: 'EURC',
+        fromAmount: usdcAmount,
+        toAmount: eurcAmount,
+        status: 'success',
+        timestamp: Date.now(),
+      });
       
       await fetchPoolData();
       await fetchAllowances();
@@ -277,6 +290,15 @@ export default function LiquidityCard() {
         usdcAmount: parseFloat(formatUnits(minUsdcOut, 6)).toFixed(6),
         eurcAmount: parseFloat(formatUnits(minEurcOut, 6)).toFixed(6),
         txHash: hash,
+      });
+
+      // Log to history
+      addTransaction(userAddress, {
+        hash,
+        type: 'removeLiquidity',
+        fromAmount: removeAmount,
+        status: 'success',
+        timestamp: Date.now(),
       });
       
       await fetchPoolData();
