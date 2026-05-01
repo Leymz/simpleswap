@@ -9,6 +9,7 @@ import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { createPublicClient, http } from 'viem';
 import { sepolia, baseSepolia } from 'viem/chains';
 import { ERC20_ABI } from '@/config/abis';
+import { addTransaction } from '@/components/TransactionHistory';
 
 interface BridgeStep {
   name: string;
@@ -299,6 +300,18 @@ export default function BridgeCard() {
       });
 
       setCompletionId(burnTxHash);
+
+      // Log bridge transaction to history
+      addTransaction(address, {
+        hash: burnTxHash,
+        type: 'bridge',
+        fromToken: token,
+        toToken: token,
+        fromAmount: amount,
+        toAmount: amount,
+        status: 'success',
+        timestamp: Date.now(),
+      });
 
       // Refresh balances
       if (address) {

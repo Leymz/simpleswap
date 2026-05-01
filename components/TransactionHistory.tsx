@@ -4,7 +4,7 @@ import { getExplorerUrl } from '@/config/wagmi';
 
 export interface Transaction {
   hash: string;
-  type: 'swap' | 'approve' | 'addLiquidity' | 'removeLiquidity';
+  type: 'swap' | 'approve' | 'addLiquidity' | 'removeLiquidity' | 'bridge';
   fromToken?: string;
   toToken?: string;
   fromAmount?: string;
@@ -13,7 +13,6 @@ export interface Transaction {
   timestamp: number;
 }
 
-// Helper to get transactions from localStorage
 const getStoredTransactions = (address: string): Transaction[] => {
   if (typeof window === 'undefined') return [];
   try {
@@ -24,11 +23,9 @@ const getStoredTransactions = (address: string): Transaction[] => {
   }
 };
 
-// Helper to save transactions to localStorage
 const saveTransactions = (address: string, transactions: Transaction[]) => {
   if (typeof window === 'undefined') return;
   try {
-    // Keep only last 50 transactions
     const trimmed = transactions.slice(0, 50);
     localStorage.setItem(`tx_history_${address.toLowerCase()}`, JSON.stringify(trimmed));
   } catch {
@@ -36,16 +33,13 @@ const saveTransactions = (address: string, transactions: Transaction[]) => {
   }
 };
 
-// Export function to add transaction (to be used by other components)
 export const addTransaction = (address: string, tx: Transaction) => {
   const existing = getStoredTransactions(address);
   const updated = [tx, ...existing.filter(t => t.hash !== tx.hash)];
   saveTransactions(address, updated);
-  // Dispatch custom event for real-time updates
   window.dispatchEvent(new CustomEvent('transaction_added', { detail: tx }));
 };
 
-// Export function to update transaction status
 export const updateTransactionStatus = (address: string, hash: string, status: 'success' | 'failed') => {
   const existing = getStoredTransactions(address);
   const updated = existing.map(tx => 
@@ -60,7 +54,6 @@ export default function TransactionHistory() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Load transactions on mount and when address changes
   useEffect(() => {
     if (address) {
       setTransactions(getStoredTransactions(address));
@@ -69,18 +62,12 @@ export default function TransactionHistory() {
     }
   }, [address]);
 
-  // Listen for transaction updates
   useEffect(() => {
     const handleAdded = () => {
-      if (address) {
-        setTransactions(getStoredTransactions(address));
-      }
+      if (address) setTransactions(getStoredTransactions(address));
     };
-
     const handleUpdated = () => {
-      if (address) {
-        setTransactions(getStoredTransactions(address));
-      }
+      if (address) setTransactions(getStoredTransactions(address));
     };
 
     window.addEventListener('transaction_added', handleAdded);
@@ -92,7 +79,6 @@ export default function TransactionHistory() {
     };
   }, [address]);
 
-  // Clear all transactions
   const clearHistory = () => {
     if (address) {
       localStorage.removeItem(`tx_history_${address.toLowerCase()}`);
@@ -100,7 +86,6 @@ export default function TransactionHistory() {
     }
   };
 
-  // Format timestamp
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -116,7 +101,6 @@ export default function TransactionHistory() {
     return date.toLocaleDateString();
   };
 
-  // Get transaction icon and color based on type
   const getTypeInfo = (type: Transaction['type']) => {
     switch (type) {
       case 'swap':
@@ -159,12 +143,21 @@ export default function TransactionHistory() {
           label: 'Remove Liquidity',
           color: 'text-orange-400'
         };
+      case 'bridge':
+        return { 
+          icon: (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+          ),
+          label: 'Bridge',
+          color: 'text-cyan-400'
+        };
       default:
         return { icon: null, label: 'Transaction', color: 'text-gray-400' };
     }
   };
 
-  // Get status badge
   const getStatusBadge = (status: Transaction['status']) => {
     switch (status) {
       case 'pending':
@@ -211,7 +204,6 @@ export default function TransactionHistory() {
   return (
     <div className="w-full max-w-md mx-auto animate-slideUp">
       <div className="glass-card rounded-2xl overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-primary-600/30">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-accent-purple/20 flex items-center justify-center">
@@ -239,7 +231,6 @@ export default function TransactionHistory() {
           )}
         </div>
 
-        {/* Transaction List */}
         <div className="divide-y divide-primary-600/20">
           {transactions.length === 0 ? (
             <div className="p-8 sm:p-12 text-center">
@@ -258,7 +249,6 @@ export default function TransactionHistory() {
                 return (
                   <div key={tx.hash} className="p-4 hover:bg-primary-800/30 transition-colors">
                     <div className="flex items-start justify-between gap-3">
-                      {/* Left side - Icon and details */}
                       <div className="flex items-start gap-3">
                         <div className={`w-8 h-8 rounded-full bg-primary-700/50 flex items-center justify-center ${typeInfo.color}`}>
                           {typeInfo.icon}
@@ -290,10 +280,14 @@ export default function TransactionHistory() {
                               Approved {tx.fromToken}
                             </p>
                           )}
+                          {tx.type === 'bridge' && tx.fromToken && (
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              Bridged {tx.fromAmount} {tx.fromToken}
+                            </p>
+                          )}
                         </div>
                       </div>
 
-                      {/* Right side - Time and link */}
                       <div className="text-right flex-shrink-0">
                         <p className="text-xs text-gray-500">{formatTime(tx.timestamp)}</p>
                         <a
@@ -313,7 +307,6 @@ export default function TransactionHistory() {
                 );
               })}
 
-              {/* Show More/Less Button */}
               {hasMore && (
                 <button
                   onClick={() => setIsExpanded(!isExpanded)}
