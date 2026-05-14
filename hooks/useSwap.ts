@@ -168,18 +168,38 @@ export function useSwap(
 
   // Approve token for SimpleDEX
   const approve = useCallback(async () => {
-    if (!walletClient || !fromToken || !userAddress) {
+    if (!walletClient || !fromToken || !userAddress || !publicClient) {
       throw new Error('Wallet not connected');
     }
 
     setState(prev => ({ ...prev, isApproving: true, error: null }));
 
     try {
+      // Estimate gas for approval with 20% buffer
+      let estimatedGas: bigint;
+      try {
+        estimatedGas = await publicClient.estimateContractGas({
+          address: fromToken.address as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [CONTRACTS.simpleDex as `0x${string}`, maxUint256],
+          account: userAddress,
+        });
+        // Add 20% buffer
+        estimatedGas = (estimatedGas * BigInt(120)) / BigInt(100);
+      } catch (gasError) {
+        console.warn('Gas estimation failed for approval, using default');
+        estimatedGas = BigInt(100000); // Fallback gas limit
+      }
+
+      console.log('=== APPROVAL GAS ===', estimatedGas.toString());
+
       const hash = await walletClient.writeContract({
         address: fromToken.address as `0x${string}`,
         abi: ERC20_ABI,
         functionName: 'approve',
         args: [CONTRACTS.simpleDex as `0x${string}`, maxUint256],
+        gas: estimatedGas,
       });
 
       setState(prev => ({ ...prev, txHash: hash }));
@@ -193,23 +213,28 @@ export function useSwap(
         timestamp: Date.now(),
       });
 
-      if (publicClient) {
-        await publicClient.waitForTransactionReceipt({ hash });
-        updateTransactionStatus(userAddress, hash, 'success');
-
-        const newAllowance = await publicClient.readContract({
-          address: fromToken.address as `0x${string}`,
-          abi: ERC20_ABI,
-          functionName: 'allowance',
-          args: [userAddress, CONTRACTS.simpleDex as `0x${string}`],
-        });
-        setAllowance(newAllowance as bigint);
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      
+      if (receipt.status === 'reverted') {
+        updateTransactionStatus(userAddress, hash, 'failed');
+        throw new Error('Approval transaction reverted');
       }
+
+      updateTransactionStatus(userAddress, hash, 'success');
+
+      const newAllowance = await publicClient.readContract({
+        address: fromToken.address as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: [userAddress, CONTRACTS.simpleDex as `0x${string}`],
+      });
+      setAllowance(newAllowance as bigint);
 
       // Clear approval txHash so approval transactions don't trigger the global success modal.
       setState(prev => ({ ...prev, isApproving: false, txHash: null }));
       return hash;
     } catch (error: any) {
+      console.error('=== APPROVAL ERROR ===', error);
       const errorMsg = error.shortMessage || error.message || 'Approval failed';
       setState(prev => ({ ...prev, isApproving: false, error: errorMsg }));
       throw error;
@@ -227,7 +252,7 @@ export function useSwap(
     try {
       const amountIn = parseUnits(amount, fromToken.decimals);
 
-      // Always verify current on-chain allowance before swapping (not relying on state)
+      // Always verify current on-chain allowance before swapping
       const currentAllowance = await publicClient.readContract({
         address: fromToken.address as `0x${string}`,
         abi: ERC20_ABI,
@@ -259,13 +284,45 @@ export function useSwap(
       const isUsdcToEurc = fromToken.symbol === 'USDC';
       const functionName = isUsdcToEurc ? 'swapUSDCForEURC' : 'swapEURCForUSDC';
 
-      // Includes deadline parameter
+      // CRITICAL FIX: Estimate gas before executing swap
+      let estimatedGas: bigint;
+      console.log('Estimating gas for swap...', { functionName, amountIn: amountIn.toString(), minOutputAmount: minOutputAmount.toString() });
+      try {
+        estimatedGas = await publicClient.estimateContractGas({
+          address: CONTRACTS.simpleDex as `0x${string}`,
+          abi: SIMPLE_DEX_ABI,
+          functionName,
+          args: [amountIn, minOutputAmount, deadline],
+          account: userAddress,
+        });
+        
+        // Add 30% buffer for safety (Arc Testnet can be unpredictable)
+        estimatedGas = (estimatedGas * BigInt(130)) / BigInt(100);
+        
+        console.log('=== SWAP GAS ESTIMATION ===');
+        console.log('Estimated gas:', estimatedGas.toString());
+        console.log('Function:', functionName);
+        console.log('Amount in:', amountIn.toString());
+        console.log('Min out:', minOutputAmount.toString());
+      } catch (gasError: any) {
+        console.error('Gas estimation failed:', gasError);
+        // Fallback gas limit - high enough for most swaps
+        estimatedGas = BigInt(800000);
+        console.log('Using fallback gas:', estimatedGas.toString());
+      }
+
+      // Execute swap with estimated gas
+      console.log('Executing swap with gasLimit:', estimatedGas.toString());
+
       const hash = await walletClient.writeContract({
         address: CONTRACTS.simpleDex as `0x${string}`,
         abi: SIMPLE_DEX_ABI,
         functionName,
         args: [amountIn, minOutputAmount, deadline],
+        gas: estimatedGas,
       });
+
+      console.log('=== SWAP TRANSACTION SENT ===', hash);
 
       setState(prev => ({ ...prev, txHash: hash }));
 
@@ -284,38 +341,43 @@ export function useSwap(
       // Wait for transaction and check status
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       
+      console.log('=== SWAP RECEIPT ===', receipt);
+
       if (receipt.status === 'reverted') {
         updateTransactionStatus(userAddress, hash, 'failed');
         setState(prev => ({ 
           ...prev, 
           isSwapping: false, 
-          error: 'Transaction failed. Check allowance or try reducing amount.' 
+          error: 'Transaction failed. Check slippage or try reducing amount.' 
         }));
         throw new Error('Transaction reverted');
       }
 
       updateTransactionStatus(userAddress, hash, 'success');
-      // Keep the swap txHash so the UI can show a success modal; do not clear it here.
       setState(prev => ({ ...prev, isSwapping: false, error: null, txHash: hash }));
       return hash;
     } catch (error: any) {
-      console.error('Swap error:', error);
+      console.error('=== SWAP ERROR ===', error);
       let errorMsg = 'Swap failed';
       
-      if (error.shortMessage) {
-        errorMsg = error.shortMessage;
-      } else if (error.message?.includes('user rejected')) {
-        errorMsg = 'Transaction rejected by user';
+      if (error.message?.includes('user rejected') || error.message?.includes('User denied')) {
+        errorMsg = 'Transaction cancelled by user';
+      } else if (error.message?.includes('gas')) {
+        errorMsg = 'Transaction failed: insufficient gas. Try again or contact support.';
       } else if (error.message?.includes('insufficient') || error.message?.includes('Insufficient')) {
         errorMsg = 'Insufficient balance or liquidity';
       } else if (error.message?.includes('expired') || error.message?.includes('Deadline')) {
         errorMsg = 'Transaction deadline expired';
+      } else if (error.message?.includes('Slippage') || error.message?.includes('slippage')) {
+        errorMsg = 'Slippage tolerance exceeded. Try increasing slippage.';
+      } else if (error.shortMessage) {
+        errorMsg = error.shortMessage;
       }
       
-      setState(prev => ({ ...prev, isSwapping: false, error: errorMsg }));
+      setState(prev => ({ ...prev, isSwapping: false, error: errorMsg, txHash: null }));
       throw error;
     }
-  }, [walletClient, publicClient, fromToken, toToken, userAddress, amount, outputAmount, minOutputAmount, needsApproval, approve]);
+  }, [walletClient, publicClient, fromToken, toToken, userAddress, amount, outputAmount, minOutputAmount, approve]);
 
   // Calculate exchange rate
   const exchangeRate = amount && parseFloat(amount) > 0 && parseFloat(outputAmount) > 0
