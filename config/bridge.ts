@@ -3,7 +3,7 @@ export const SUPPORTED_CHAINS = {
     id: 5042002,
     name: 'Arc Testnet',
     bridgeId: 'Arc_Testnet',
-    rpc: 'https://rpc.testnet.arc.network',
+    rpc: 'https://rpc.drpc.testnet.arc.network',
     explorer: 'https://testnet.arcscan.app',
     nativeToken: 'USDC',
   },
